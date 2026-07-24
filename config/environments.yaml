@@ -1,0 +1,115 @@
+# Configuração de Ambientes
+# Baseado na estrutura do Ansible original
+
+environments:
+  ptf:
+    name: "PathFind"
+    description: "Ambiente de produção PathFind"
+    database:
+      template: "ptf_banco_limpo_v15_12_0_3_43"
+      default_version: "15.13.1.0-1"
+      version_table: "configuracao"
+      version_field: "valor_texto"
+      version_condition: "nomecampo = 'versao_banco'"
+    features:
+      - database_creation
+      - sql_updates
+      - configuration
+      - credentials
+      - custom_data_processing
+    
+  pln:
+    name: "Planner"
+    description: "Ambiente Planner"
+    database:
+      template: "ptf_planner_banco_limpo_9_0_0_0_0"
+      default_version: "9.0.1.1-14"
+      version_table: "versaobanco"
+      version_field: "versao"
+      version_condition: "ORDER BY id DESC LIMIT 1"
+    features:
+      - database_creation
+      - sql_updates
+      - credentials
+      - custom_data_processing
+
+servers:
+  gcp01:
+    name: "GCP Server 01"
+    host: "10.128.0.100"
+    description: "Servidor principal GCP"
+    environments: ["ptf", "pln"]
+    
+  gcp02:
+    name: "GCP Server 02"
+    host: "10.128.0.101"
+    description: "Servidor secundário GCP"
+    environments: ["ptf", "pln"]
+    
+  oci-pln-qa:
+    name: "OCI PLN QA"
+    host: "164.152.198.41"
+    description: "Servidor OCI para ambiente PLN QA"
+    environments: ["pln"]
+    ssh_user: "infra"
+    provider: "oci"
+
+  oci-db-imp:
+    name: "OCI DB IMP"
+    host: "204.216.191.1"
+    description: "Servidor de banco de dados OCI para ambiente PTF"
+    environments: ["ptf"]
+    provider: "oci"
+
+  oci-db-qa:
+    name: "OCI DB QA"
+    host: "167.126.30.109"
+    description: "Servidor de banco de dados OCI para ambientes PLN e PTF"
+    environments: ["pln", "ptf"]
+    provider: "oci"
+
+  oci-db-02:
+    name: "OCI DB 02"
+    host: "204.216.178.119"
+    description: "Servidor de banco de dados OCI para ambiente PTF"
+    environments: ["ptf"]
+    provider: "oci"
+
+  oci-ptf-qa:
+    name: "OCI PTF QA Deploy"
+    host: "134.65.30.12"
+    description: "Servidor de deploy OCI para ambiente PTF QA"
+    environments: ["ptf"]
+    ssh_user: "infra"
+    server_type: "deploy"
+    provider: "oci"
+
+  oci-ptf-prod-01:
+    name: "OCI PTF PROD 01 Deploy"
+    host: "167.126.9.6"
+    description: "Servidor de deploy OCI para ambiente PTF PROD"
+    environments: ["ptf"]
+    ssh_user: "infra"
+    server_type: "deploy"
+    provider: "oci"
+
+  local01:
+    name: "Local Development"
+    host: "localhost"
+    description: "Servidor de desenvolvimento local"
+    environments: ["ptf", "pln"]
+
+database:
+  default_port: 5432
+  default_user: "pathfinddb"
+  connection_timeout: 30
+  
+deployment:
+  default_path: "/opt/applications"
+  backup_retention_days: 7
+  java_opts: "-Xms512m -Xmx2g -Dfile.encoding=UTF-8"
+  
+logging:
+  level: "INFO"
+  retention_days: 30
+  max_file_size: "100MB"

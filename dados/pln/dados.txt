@@ -1,0 +1,9 @@
+Endereço: R Jasmim, 15
+Bairro: Chacara Boa Vista
+Cidade: Contagem
+Estado: MG
+CEP: (não informado)
+Lat: -19.889993
+Long: -44.052744
+CNPJ: 61247612000178
+Razao Social: FORT LUB DISTRIBUIDORA LTDA

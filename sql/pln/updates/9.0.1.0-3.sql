@@ -1,0 +1,10 @@
+			--9.0.1.0-3
+				ALTER TABLE cliente DROP COLUMN IF EXISTS telefone;
+
+				ALTER TABLE cliente ADD COLUMN IF NOT EXISTS ddi CHARACTER VARYING(5);
+				ALTER TABLE cliente ADD COLUMN IF NOT EXISTS telefone CHARACTER VARYING(20);
+
+				INSERT INTO versaoBanco(versao)
+				VALUES ('9.0.1.0-3')
+				ON CONFLICT (versao)
+				DO NOTHING;

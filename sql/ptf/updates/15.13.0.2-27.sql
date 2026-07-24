@@ -1,0 +1,5 @@
+INSERT INTO configuracao(tipo, nomecampo, nometela, selecionado, valor, valor_texto) SELECT 'STRING', 'kettle-proxy-username', 'kettle-proxy', false, 0, 'ptf-suporte' WHERE NOT EXISTS (SELECT 1 FROM configuracao WHERE nomecampo = 'kettle-proxy-username' and nometela = 'kettle-proxy' );
+INSERT INTO configuracao(tipo, nomecampo, nometela, selecionado, valor, valor_texto) SELECT 'STRING', 'kettle-proxy-password', 'kettle-proxy', false, 0, 'ptf2024' WHERE NOT EXISTS (SELECT 1 FROM configuracao WHERE nomecampo = 'kettle-proxy-password' and nometela = 'kettle-proxy' );
+INSERT INTO configuracao(tipo, nomecampo, nometela, selecionado, valor, valor_texto) SELECT 'STRING', 'kettle-proxy-url', 'kettle-proxy', false, 0, 'http://localhost:8080' WHERE NOT EXISTS (SELECT 1 FROM configuracao WHERE nomecampo = 'kettle-proxy-url' and nometela = 'kettle-proxy' );
+
+UPDATE public.configuracao SET valor_texto= 'v.15.13.0.2-27' WHERE nomecampo = 'versao_banco';
