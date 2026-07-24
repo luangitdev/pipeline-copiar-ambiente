@@ -270,10 +270,14 @@ configure_db() {
                 comp_desejada=$(compare_versions "$update_version" "$DESTINO_VERSAO_BANCO")
                 if [[ "$comp_atual" == "1" ]] && [[ "$comp_desejada" == "-1" || "$comp_desejada" == "0" ]]; then
                     eligible_update_files+=("$update_file")
+                else
+                    log "   ⏭️  Pulando update $update_version (comp_atual=$comp_atual vs $versao_inicial, comp_desejada=$comp_desejada vs $DESTINO_VERSAO_BANCO)"
                 fi
             fi
         done
 
+        log "🔄 ${#eligible_update_files[@]} updates elegíveis para aplicação ($versao_inicial → $DESTINO_VERSAO_BANCO)"
+        local FAILED_UPDATES=()
         for update_file in "${eligible_update_files[@]}"; do
             local update_label
             update_label=$(basename "$update_file" .sql)
@@ -284,11 +288,19 @@ configure_db() {
                 ((UPDATE_COUNT++))
                 log_success "Update $update_version aplicado"
             else
-                log_error "Falha ao aplicar update $update_version"
-                return 1
+                log_error "Falha ao aplicar update $update_version — continuando para o próximo"
+                FAILED_UPDATES+=("$update_label (versão: $update_version)")
             fi
         done
-        log_success "$UPDATE_COUNT updates aplicados em '$target_db'"
+        log_success "$UPDATE_COUNT/${#eligible_update_files[@]} updates aplicados com sucesso em '$target_db'"
+        if [[ ${#FAILED_UPDATES[@]} -gt 0 ]]; then
+            log_warning "⚠️  ${#FAILED_UPDATES[@]} update(s) falharam:"
+            for f in "${FAILED_UPDATES[@]}"; do
+                log_warning "   - $f"
+            done
+            # Propaga lista de falhas para o escopo global via arquivo temporário
+            printf '%s\n' "${FAILED_UPDATES[@]}" > "$WORKSPACE/temp/.failed_updates"
+        fi
     else
         log_warning "Diretório de updates não encontrado: $UPDATES_DIR"
     fi
@@ -428,3 +440,15 @@ fi
 
 log_success "Banco '$DESTINO_NOME_BANCO' copiado e configurado com sucesso!"
 log_success "Versão final: $DESTINO_VERSAO_BANCO"
+
+# ========== RESUMO DE UPDATES COM FALHA ==========
+if [[ -f "$WORKSPACE/temp/.failed_updates" ]]; then
+    log_warning "╔══════════════════════════════════════════════════════════════╗"
+    log_warning "║  RESUMO: ALGUNS UPDATES NÃO FORAM APLICADOS COM SUCESSO      ║"
+    log_warning "╠══════════════════════════════════════════════════════════════╣"
+    while IFS= read -r line; do
+        log_warning "║  - $line"
+    done < "$WORKSPACE/temp/.failed_updates"
+    log_warning "╚══════════════════════════════════════════════════════════════╝"
+    log_warning "O pipeline prosseguiu, mas revise os updates acima manualmente."
+fi
