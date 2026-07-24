@@ -11,7 +11,6 @@ Jenkinsfile               # Pipeline principal — único ponto de entrada
 config/environments.yaml  # Metadados de servidores (copiado de pipelineCriarAmbiente)
 scripts/                  # Scripts bash executados via bastion
 sql/{ptf,pln}/            # SQLs de configuração + migrations em updates/
-dados/{ptf,pln}/          # dados.txt padrão por ambiente
 ```
 
 ## Fluxo de Execução
@@ -25,7 +24,7 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
 ## Stages do Jenkinsfile
 
 1. **Validação de Parâmetros** — resolve hosts origem/destino, valida versões
-2. **Preparação do Ambiente** — cria `temp/`, prepara `dados.txt` para destino
+2. **Preparação do Ambiente** — cria `temp/` e diretórios de trabalho
 3. **Sincronização de Migrations** — clona repo de infraestrutura (se necessário)
 4. **Cópia do Banco de Dados** — executa via bastion: `scripts/copy_database.sh`
    - `pg_dump` do banco origem
@@ -33,7 +32,6 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
    - Aplica updates da **versão origem → versão destino**
    - Executa config SQL (config-qa.sql, config-imp.sql, config-prod.sql, etc.)
    - Executa credentials.sql
-   - Executa start.sql com dados do destino
 5. **Deploy da Aplicação** — reutiliza `build_app_artifact.sh` + `deploy_application.sh`
 6. **Verificação Final** — `verify_database.sh` + `verify_deployment.sh`
 
@@ -61,7 +59,6 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
 | `DESTINO_TOMCAT_VOLUME` | Nome do volume Docker Tomcat destino |
 | `DESTINO_APP_NAME` | Nome da aplicação no Tomcat destino |
 | `DESTINO_VERSAO_APP` | Versão/ref desejada da aplicação |
-| `DADOS_AMBIENTE_DESTINO` | Dados do ambiente destino (Endereço, CNPJ, etc.) |
 | `TIPO_AMBIENTE` | PTF ou PLN |
 
 ### Comportamento de Aplicação

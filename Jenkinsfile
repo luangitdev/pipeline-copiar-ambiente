@@ -6,7 +6,6 @@ pipeline {
         SCRIPTS_PATH = "${WORKSPACE}/scripts"
         CONFIG_PATH = "${WORKSPACE}/config"
         SQL_PATH = "${WORKSPACE}/sql"
-        DADOS_PATH = "${WORKSPACE}/dados"
         TEMPLATES_PATH = "${WORKSPACE}/templates"
         DB_PORT = '5432'
         LOG_LEVEL = 'INFO'
@@ -148,11 +147,7 @@ pipeline {
                             description: 'Versão desejada do banco destino (ex: PTF → 15.13.1.0-1 | PLN → 9.0.1.1-14)',
                             trim: true
                         ],
-                        [$class: 'TextParameterDefinition',
-                            name: 'DADOS_AMBIENTE_DESTINO',
-                            defaultValue: 'Endereço: Rua Capitão Luis Ramos, 200\nBairro: Vila Guilherme\nCidade: São Paulo\nEstado: SP\nCEP: 02066-010\nLat: -23.507212290544405\nLong: -46.607500704611475\nCNPJ: 09645368000181\nRazao Social: AGEBRANDS',
-                            description: 'Dados do ambiente DESTINO no formato Chave: Valor'
-                        ],
+
                         [$class: 'BooleanParameterDefinition',
                             name: 'DEPLOY_APP',
                             defaultValue: true,
@@ -422,21 +417,7 @@ pipeline {
                         chmod +x ${SCRIPTS_PATH}/*.sh
                     """
 
-                    // Criar arquivo dados.txt a partir do parâmetro para o DESTINO
-                    if (params.DADOS_AMBIENTE_DESTINO && params.DADOS_AMBIENTE_DESTINO.trim() != '') {
-                        writeFile file: "${WORKSPACE}/temp/dados.txt", text: params.DADOS_AMBIENTE_DESTINO
-                        echo "✅ Dados do ambiente destino criados a partir do parâmetro"
-                    } else {
-                        sh """
-                            if [ -f "${DADOS_PATH}/${params.TIPO_AMBIENTE}/dados.txt" ]; then
-                                cp "${DADOS_PATH}/${params.TIPO_AMBIENTE}/dados.txt" ${WORKSPACE}/temp/
-                                echo "✅ Dados do ambiente ${params.TIPO_AMBIENTE} copiados do arquivo padrão"
-                            else
-                                echo "❌ Nenhum dado fornecido e arquivo padrão não encontrado!"
-                                exit 1
-                            fi
-                        """
-                    }
+
                 }
             }
         }
@@ -603,8 +584,7 @@ echo "================================="
     --destino-nome-banco "${params.DESTINO_NOME_BANCO}" \\
     --destino-versao-banco "${env.DESTINO_VERSAO_BANCO_CLEAN}" \\
     --workspace "/tmp/pipeline-${BUILD_NUMBER}" \\
-    --updates-dir "/tmp/pipeline-${BUILD_NUMBER}/temp/sql_updates/${params.TIPO_AMBIENTE.toLowerCase()}/updates" \\
-    --dados-file "/tmp/pipeline-${BUILD_NUMBER}/temp/dados.txt"
+    --updates-dir "/tmp/pipeline-${BUILD_NUMBER}/temp/sql_updates/${params.TIPO_AMBIENTE.toLowerCase()}/updates"
 
 if [ \$? -ne 0 ]; then
     echo "❌ ERRO: Falha na cópia do banco de dados!"

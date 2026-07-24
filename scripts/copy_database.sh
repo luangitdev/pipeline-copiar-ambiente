@@ -31,7 +31,6 @@ DESTINO_VERSAO_BANCO=""
 TIPO_AMBIENTE=""
 WORKSPACE=""
 UPDATES_DIR_OVERRIDE=""
-DADOS_FILE_OVERRIDE=""
 ALLOW_EXISTING_DB="${ALLOW_EXISTING_DB:-false}"
 
 # Parse de argumentos
@@ -107,10 +106,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --updates-dir)
             UPDATES_DIR_OVERRIDE="$2"
-            shift 2
-            ;;
-        --dados-file)
-            DADOS_FILE_OVERRIDE="$2"
             shift 2
             ;;
         *)
@@ -197,26 +192,29 @@ execute_sql_file_dest() {
     return 0
 }
 
-# Aplica start.sql, config.sql, updates e credentials no banco destino.
+# Aplica config.sql, updates e credentials no banco destino.
+# Opcionalmente aplica start.sql se um arquivo de dados for fornecido.
 configure_db() {
     local target_db="$1"
     local versao_inicial="$2"
-    local local_dados_file="${3:-$DADOS_FILE}"
+    local local_dados_file="${3:-}"
 
-    # Gerar start.sql personalizado
-    "$WORKSPACE/scripts/generate_start_sql.sh" "$local_dados_file" "$TIPO_AMBIENTE" "$WORKSPACE/temp"
+    if [[ -n "$local_dados_file" && -f "$local_dados_file" ]]; then
+        # Gerar start.sql personalizado
+        "$WORKSPACE/scripts/generate_start_sql.sh" "$local_dados_file" "$TIPO_AMBIENTE" "$WORKSPACE/temp"
 
-    local START_SQL="$WORKSPACE/temp/start_${TIPO_AMBIENTE}.sql"
-    if [[ -f "$START_SQL" ]]; then
-        log "🔧 Executando configuração inicial em '$target_db'..."
-        if execute_sql_file_dest "$START_SQL" "$target_db"; then
-            log_success "Configuração inicial aplicada"
+        local START_SQL="$WORKSPACE/temp/start_${TIPO_AMBIENTE}.sql"
+        if [[ -f "$START_SQL" ]]; then
+            log "🔧 Executando configuração inicial em '$target_db'..."
+            if execute_sql_file_dest "$START_SQL" "$target_db"; then
+                log_success "Configuração inicial aplicada"
+            else
+                log_error "Falha ao aplicar configuração inicial"
+                return 1
+            fi
         else
-            log_error "Falha ao aplicar configuração inicial"
-            return 1
+            log_warning "Arquivo start.sql não encontrado: $START_SQL"
         fi
-    else
-        log_warning "Arquivo start.sql não encontrado: $START_SQL"
     fi
 
     local CONFIG_SQL=""
@@ -418,25 +416,11 @@ fi
 rm -f "$DUMP_FILE"
 log_success "Restore concluído no destino!"
 
-# ========== 8. PROCESSAR DADOS DO AMBIENTE DESTINO ==========
-log "📋 Processando dados do ambiente destino..."
-DADOS_FILE_TEMP="$WORKSPACE/temp/dados.txt"
-DADOS_FILE_DEFAULT="$WORKSPACE/dados/$TIPO_AMBIENTE/dados.txt"
-
-if [[ -f "$DADOS_FILE_TEMP" ]]; then
-    log "📄 Usando dados fornecidos como parâmetro"
-    DADOS_FILE="$DADOS_FILE_TEMP"
-elif [[ -f "$DADOS_FILE_DEFAULT" ]]; then
-    log "📄 Usando arquivo padrão do ambiente"
-    DADOS_FILE="$DADOS_FILE_DEFAULT"
-else
-    log_error "Nenhum arquivo de dados encontrado — esperado: $DADOS_FILE_TEMP ou $DADOS_FILE_DEFAULT"
-    exit 1
-fi
-
-# ========== 9. CONFIGURAR BANCO DESTINO ==========
+# ========== 8. CONFIGURAR BANCO DESTINO ==========
 log "🔧 Configurando banco destino '$DESTINO_NOME_BANCO'..."
-configure_db "$DESTINO_NOME_BANCO" "$SOURCE_VERSAO_BANCO" "$DADOS_FILE"
+# Não aplicamos start.sql pois o banco destino é uma cópia do origem e
+# já contém os dados de ambiente. Aplicamos apenas config, updates e credentials.
+configure_db "$DESTINO_NOME_BANCO" "$SOURCE_VERSAO_BANCO"
 if [[ $? -ne 0 ]]; then
     log_error "Falha na configuração do banco destino"
     exit 1
