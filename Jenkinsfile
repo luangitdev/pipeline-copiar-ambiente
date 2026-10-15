@@ -62,6 +62,7 @@ pipeline {
                                     if (TIPO_AMBIENTE == "PLN") {
                                         return [
                                             "OCI-PLN-QA:164.152.198.41",
+                                            "OCI-PLN-PROD-03:204.216.181.223",
                                             "PROD-02:34.151.209.238",
                                             "PROD-03:35.199.116.136",
                                             "PROD-04:35.198.30.206",
