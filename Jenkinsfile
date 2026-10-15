@@ -124,7 +124,7 @@ pipeline {
                                 fallbackScript: [classpath: [], sandbox: true, script: 'return ["GCP01"]'],
                                 script: [classpath: [], sandbox: true, script: '''
                                     if (TIPO_AMBIENTE == "PLN") {
-                                        return ["GCP-PLN", "OCI-DB-QA"]
+                                        return ["GCP-PLN", "OCI-DB-QA", "OCI-DB-03"]
                                     } else {
                                         return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02"]
                                     }
@@ -162,6 +162,7 @@ pipeline {
                                     if (TIPO_AMBIENTE == "PLN") {
                                         return [
                                             "OCI-PLN-QA:164.152.198.41",
+                                            "OCI-PLN-PROD-03:204.216.181.223",
                                             "PROD-02:34.151.209.238",
                                             "PROD-03:35.199.116.136",
                                             "PROD-04:35.198.30.206",
@@ -294,7 +295,8 @@ pipeline {
                     def dbInternalHostMap = [
                         'oci-db-qa'  : '10.0.2.143',
                         'oci-db-imp' : '10.0.1.245',
-                        'oci-db-02'  : '10.0.1.21'
+                        'oci-db-02'  : '10.0.1.21',
+                        'oci-db-03'  : '10.0.1.246'
                     ]
                     env.SOURCE_DB_INTERNAL_HOST = dbInternalHostMap.get(params.SOURCE_SERVIDOR.toLowerCase(), env.SOURCE_DB_HOST)
                     env.DESTINO_DB_INTERNAL_HOST = dbInternalHostMap.get(params.DESTINO_SERVIDOR.toLowerCase(), env.DESTINO_DB_HOST)
@@ -304,6 +306,7 @@ pipeline {
                         'oci-db-qa'  : [user: 'ociadm', password: 'Mobiis@path#2026'],
                         'oci-db-imp' : [user: 'ociadm', password: 'Mobi!sfor#2027%'],
                         'oci-db-02'  : [user: 'ociadm', password: 'T8q#6m%74dZj'],
+                        'oci-db-03'  : [user: 'ociadm', password: 'T8q#6m%74dZj'],
                     ]
                     def deployDbCreds = deployDbCredsByServer.get(params.DESTINO_SERVIDOR.toLowerCase(), [user: 'pathfinddb', password: 'Find**(path)$DB'])
                     env.DEPLOY_DB_USER     = deployDbCreds.user
