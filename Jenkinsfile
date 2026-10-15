@@ -49,12 +49,6 @@ pipeline {
                             description: 'Nome do banco de dados existente no servidor origem',
                             trim: true
                         ],
-                        [$class: 'StringParameterDefinition',
-                            name: 'SOURCE_VERSAO_BANCO',
-                            defaultValue: '',
-                            description: 'Versão atual do banco origem (ex: 15.13.1.0-27 | 9.0.1.1-14)',
-                            trim: true
-                        ],
                         [$class: 'CascadeChoiceParameter',
                             choiceType: 'PT_SINGLE_SELECT',
                             description: 'Servidor de deploy ORIGEM (formato NOME:IP)',
@@ -100,15 +94,15 @@ pipeline {
                             ]
                         ],
                         [$class: 'StringParameterDefinition',
-                            name: 'SOURCE_TOMCAT_VOLUME',
+                            name: 'SOURCE_APP_URL',
                             defaultValue: '',
-                            description: 'Nome do volume Docker do Tomcat na origem (ex: ptf-routing_tomcat-v15_8081)',
+                            description: 'URL da aplicação ORIGEM, com ou sem /login.xhtml (ex: https://routing.pathfindsistema.com.br/pathfind_dbk_rp). Obrigatória quando DEPLOY_APP=true; usada para descobrir a versão e o nome da aplicação.',
                             trim: true
                         ],
                         [$class: 'StringParameterDefinition',
-                            name: 'SOURCE_VERSAO_APP',
+                            name: 'SOURCE_APP_NAME',
                             defaultValue: '',
-                            description: 'Versão/ref atual da aplicação na origem',
+                            description: 'Opcional. Nome da aplicação de origem no Tomcat. Se vazio, é derivado do path da SOURCE_APP_URL.',
                             trim: true
                         ],
 
@@ -198,12 +192,6 @@ pipeline {
                             ]
                         ],
                         [$class: 'StringParameterDefinition',
-                            name: 'DESTINO_TOMCAT_VOLUME',
-                            defaultValue: '',
-                            description: 'Nome do volume Docker do Tomcat no destino (ex: ptf-routing_tomcat-v15_8081)',
-                            trim: true
-                        ],
-                        [$class: 'StringParameterDefinition',
                             name: 'DESTINO_APP_NAME',
                             defaultValue: 'pathfind_',
                             description: 'Nome final da aplicação no Tomcat destino',
@@ -259,9 +247,9 @@ pipeline {
                     echo "📋 Parâmetros recebidos:"
                     echo "   - Tipo Ambiente: ${params.TIPO_AMBIENTE}"
                     echo "   - Origem DB: ${params.SOURCE_SERVIDOR} / ${params.SOURCE_NOME_BANCO}"
-                    echo "   - Origem App: ${params.SOURCE_DEPLOY_TARGET} / ${params.SOURCE_TOMCAT_VOLUME}"
+                    echo "   - Origem App: ${params.SOURCE_DEPLOY_TARGET} / ${params.SOURCE_APP_URL}"
                     echo "   - Destino DB: ${params.DESTINO_SERVIDOR} / ${params.DESTINO_NOME_BANCO}"
-                    echo "   - Destino App: ${params.DESTINO_DEPLOY_TARGET} / ${params.DESTINO_TOMCAT_VOLUME}"
+                    echo "   - Destino App: ${params.DESTINO_DEPLOY_TARGET} (Tomcat será escolhido durante a execução)"
                     echo "   - Criar Banco: ${params.CRIAR_BANCO}"
                     echo "   - Deploy App: ${params.DEPLOY_APP}"
                     echo "======================================="
@@ -277,41 +265,13 @@ pipeline {
                         error("❌ Nome do banco origem e destino não podem ser iguais!")
                     }
 
-                    def sourceVersaoBanco = params.SOURCE_VERSAO_BANCO?.trim()?.replaceAll('[,;\\s]', '')
+                    // A versão do banco ORIGEM é descoberta no stage 'Descoberta da Origem'.
+                    // A comparação origem × destino é feita no stage 'Validação de Versões'.
                     def destinoVersaoBanco = params.DESTINO_VERSAO_BANCO?.trim()?.replaceAll('[,;\\s]', '')
-                    env.SOURCE_VERSAO_BANCO_CLEAN = sourceVersaoBanco
                     env.DESTINO_VERSAO_BANCO_CLEAN = destinoVersaoBanco
 
-                    if (params.CRIAR_BANCO && (!sourceVersaoBanco || !destinoVersaoBanco)) {
-                        error("❌ SOURCE_VERSAO_BANCO e DESTINO_VERSAO_BANCO são obrigatórios quando CRIAR_BANCO=true.")
-                    }
-
-                    if (params.CRIAR_BANCO) {
-                        def compareVersions = { String v ->
-                            def matcher = (v =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)$/)
-                            if (!matcher.matches()) {
-                                error("❌ Versão de banco inválida: '${v}'. Use N.N.N.N-N.")
-                            }
-                            return [
-                                matcher[0][1].toInteger(),
-                                matcher[0][2].toInteger(),
-                                matcher[0][3].toInteger(),
-                                matcher[0][4].toInteger(),
-                                matcher[0][5].toInteger()
-                            ]
-                        }
-                        def isLowerThan = { left, right ->
-                            for (int i = 0; i < left.size(); i++) {
-                                if (left[i] < right[i]) return true
-                                if (left[i] > right[i]) return false
-                            }
-                            return false
-                        }
-                        def srcTokens = compareVersions(sourceVersaoBanco)
-                        def dstTokens = compareVersions(destinoVersaoBanco)
-                        if (isLowerThan(dstTokens, srcTokens)) {
-                            error("❌ DESTINO_VERSAO_BANCO (${destinoVersaoBanco}) não pode ser menor que SOURCE_VERSAO_BANCO (${sourceVersaoBanco}).")
-                        }
+                    if (params.CRIAR_BANCO && !destinoVersaoBanco) {
+                        error("❌ DESTINO_VERSAO_BANCO é obrigatória quando CRIAR_BANCO=true.")
                     }
 
                     def destinoVersaoAppParam = params.DESTINO_VERSAO_APP?.trim()
@@ -369,8 +329,14 @@ pipeline {
                         env.DESTINO_DEPLOY_SERVER_NAME = destinoParts[0]
                         env.DESTINO_DEPLOY_SERVER_IP = destinoParts[1]
 
-                        if (!params.DESTINO_TOMCAT_VOLUME || params.DESTINO_TOMCAT_VOLUME.trim() == '') {
-                            error("❌ DESTINO_TOMCAT_VOLUME é obrigatório quando DEPLOY_APP=true!")
+                        if (!params.SOURCE_APP_URL || params.SOURCE_APP_URL.trim() == '') {
+                            error("❌ SOURCE_APP_URL é obrigatória quando DEPLOY_APP=true!")
+                        }
+                        if (!(params.SOURCE_APP_URL.trim() ==~ /^[A-Za-z0-9:\/._~%?=&#@+-]+$/)) {
+                            error("❌ SOURCE_APP_URL contém caracteres inválidos.")
+                        }
+                        if (params.SOURCE_APP_NAME?.trim() && !(params.SOURCE_APP_NAME.trim() ==~ /^[A-Za-z0-9._-]+$/)) {
+                            error("❌ SOURCE_APP_NAME contém caracteres inválidos.")
                         }
                         if (!params.DESTINO_APP_NAME || params.DESTINO_APP_NAME.trim() == '') {
                             error("❌ DESTINO_APP_NAME é obrigatório quando DEPLOY_APP=true!")
@@ -419,6 +385,231 @@ pipeline {
                     """
 
 
+                }
+            }
+        }
+
+        stage('🔎 Descoberta da Origem') {
+            when {
+                expression { params.CRIAR_BANCO || params.DEPLOY_APP }
+            }
+            steps {
+                script {
+                    def tipo = params.TIPO_AMBIENTE.toLowerCase()
+                    def appName = ''
+                    def appVersion = ''
+                    def appVersionViaBastion = false
+
+                    // ---- Aplicação de origem: normaliza URL, deriva nome e lê a versão (executa no agente) ----
+                    if (params.DEPLOY_APP) {
+                        def appOut = ''
+                        withEnv(["APP_URL_IN=${params.SOURCE_APP_URL}", "APP_NAME_IN=${params.SOURCE_APP_NAME ?: ''}"]) {
+                            appOut = sh(
+                                script: '''${SCRIPTS_PATH}/discover_source.sh --mode app-info --tipo-ambiente "''' + tipo + '''" --app-url "$APP_URL_IN" --app-name "$APP_NAME_IN"''',
+                                returnStdout: true
+                            )
+                        }
+                        def appRes = parseResults(appOut)
+                        appName = appRes['APP_NAME'] ? appRes['APP_NAME'][0] : ''
+                        appVersion = appRes['APP_VERSION'] ? appRes['APP_VERSION'][0] : ''
+                        if (!appName) {
+                            error("❌ Não foi possível determinar o nome da aplicação de origem.")
+                        }
+                        // Fallback: se o agente não alcançou a URL, tenta a partir do bastion
+                        appVersionViaBastion = !appVersion
+                    }
+
+                    // ---- Banco e Tomcat de origem (executa via bastion) ----
+                    def srcCreds = [user: '', password: '']
+                    def remote = ''
+                    remote += "set -euo pipefail\n"
+                    remote += "cd /tmp/pipeline-${env.BUILD_NUMBER}\n"
+                    remote += "chmod +x scripts/*.sh\n"
+                    remote += "chmod 600 .secret_* .deploy_ssh_key 2>/dev/null || true\n"
+
+                    if (params.CRIAR_BANCO) {
+                        remote += """./scripts/discover_source.sh --mode db-version \\
+    --tipo-ambiente "${tipo}" \\
+    --db-host "${env.SOURCE_DB_HOST}" \\
+    --db-port "${env.DB_PORT}" \\
+    --db-user "@@SRC_DB_USER@@" \\
+    --db-password-file ".secret_src_db_password" \\
+    --db-name "${params.SOURCE_NOME_BANCO}"
+"""
+                    }
+                    if (params.DEPLOY_APP) {
+                        remote += """./scripts/list_tomcats.sh --mode find \\
+    --tipo-ambiente "${tipo}" \\
+    --deploy-server-ip "${env.SOURCE_DEPLOY_SERVER_IP}" \\
+    --ssh-key-file ".deploy_ssh_key" \\
+    --sudo-password-file ".secret_sudo_password" \\
+    --app-name "${appName}"
+"""
+                        if (appVersionViaBastion) {
+                            remote += """./scripts/discover_source.sh --mode app-info \\
+    --tipo-ambiente "${tipo}" \\
+    --app-url '${params.SOURCE_APP_URL.trim()}' \\
+    --app-name '${params.SOURCE_APP_NAME ?: ''}' | sed 's/^RESULT:APP_VERSION=/RESULT:BASTION_APP_VERSION=/'
+"""
+                        }
+                    }
+
+                    def bastionOut = ''
+                    withCredentials(dbCredentialBindings() + [
+                        string(credentialsId: 'BASTION_HOST', variable: 'BASTION_HOST'),
+                        string(credentialsId: 'BASTION_USER', variable: 'BASTION_USER'),
+                        string(credentialsId: 'infra-sudo-pswd', variable: 'INFRA_SUDO_PASSWORD'),
+                        sshUserPrivateKey(credentialsId: 'SSH_PRIVATE_KEY', keyFileVariable: 'SSH_KEY', passphraseVariable: 'SSH_PASSPHRASE'),
+                        sshUserPrivateKey(credentialsId: 'ssh-credentials', keyFileVariable: 'DEPLOY_SSH_KEY', passphraseVariable: 'DEPLOY_SSH_PASSPHRASE')
+                    ]) {
+                        if (params.CRIAR_BANCO) {
+                            srcCreds = dbCredsFor(params.SOURCE_SERVIDOR, 'SOURCE_SERVIDOR')
+                        }
+                        withEnv(["SRC_DB_PASSWORD=${srcCreds.password}"]) {
+                            def secrets = [:]
+                            def files = [:]
+                            if (params.CRIAR_BANCO) { secrets['.secret_src_db_password'] = 'SRC_DB_PASSWORD' }
+                            if (params.DEPLOY_APP) {
+                                secrets['.secret_sudo_password'] = 'INFRA_SUDO_PASSWORD'
+                                files['.deploy_ssh_key'] = 'DEPLOY_SSH_KEY'
+                            }
+                            bastionOut = runOnBastion(
+                                remote: remote.replace('@@SRC_DB_USER@@', srcCreds.user),
+                                secrets: secrets,
+                                files: files
+                            )
+                        }
+                    }
+
+                    def res = parseResults(bastionOut)
+
+                    if (params.CRIAR_BANCO) {
+                        def dbVersion = res['DB_VERSION'] ? res['DB_VERSION'][0] : ''
+                        if (!dbVersion) {
+                            error("❌ Não foi possível descobrir a versão do banco de origem '${params.SOURCE_NOME_BANCO}'.")
+                        }
+                        env.SOURCE_VERSAO_BANCO_CLEAN = dbVersion
+                    }
+                    if (params.DEPLOY_APP) {
+                        if (appVersionViaBastion) {
+                            appVersion = res['BASTION_APP_VERSION'] ? res['BASTION_APP_VERSION'][0] : ''
+                        }
+                        def srcTomcat = res['TOMCAT'] ? res['TOMCAT'][0] : ''
+                        env.SOURCE_APP_NAME_RESOLVED = appName
+                        env.SOURCE_TOMCAT_DISCOVERED = srcTomcat ?: 'não encontrado'
+                        env.SOURCE_VERSAO_APP_DISCOVERED = appVersion ?: 'desconhecida'
+                        if (!srcTomcat) {
+                            echo "⚠️ Aplicação '${appName}' não encontrada nos Tomcats de ${env.SOURCE_DEPLOY_SERVER_NAME}."
+                        }
+                    }
+
+                    echo "✅ Descoberta concluída:"
+                    if (params.CRIAR_BANCO) {
+                        echo "   - Versão do banco origem: ${env.SOURCE_VERSAO_BANCO_CLEAN}"
+                    }
+                    if (params.DEPLOY_APP) {
+                        echo "   - Aplicação origem: ${env.SOURCE_APP_NAME_RESOLVED}"
+                        echo "   - Tomcat origem: ${env.SOURCE_TOMCAT_DISCOVERED}"
+                        echo "   - Versão da aplicação origem: ${env.SOURCE_VERSAO_APP_DISCOVERED}"
+                    }
+                    currentBuild.description = currentBuild.description +
+                        (params.CRIAR_BANCO ? " | DB origem v${env.SOURCE_VERSAO_BANCO_CLEAN}" : '') +
+                        (params.DEPLOY_APP ? " | App origem v${env.SOURCE_VERSAO_APP_DISCOVERED}" : '')
+                }
+            }
+        }
+
+        stage('✔️ Validação de Versões') {
+            when {
+                expression { params.CRIAR_BANCO }
+            }
+            steps {
+                script {
+                    def sourceVersaoBanco = env.SOURCE_VERSAO_BANCO_CLEAN
+                    def destinoVersaoBanco = env.DESTINO_VERSAO_BANCO_CLEAN
+
+                    def compareVersions = { String v ->
+                        def matcher = (v =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)$/)
+                        if (!matcher.matches()) {
+                            error("❌ Versão de banco inválida: '${v}'. Use N.N.N.N-N.")
+                        }
+                        return [
+                            matcher[0][1].toInteger(),
+                            matcher[0][2].toInteger(),
+                            matcher[0][3].toInteger(),
+                            matcher[0][4].toInteger(),
+                            matcher[0][5].toInteger()
+                        ]
+                    }
+                    def isLowerThan = { left, right ->
+                        for (int i = 0; i < left.size(); i++) {
+                            if (left[i] < right[i]) return true
+                            if (left[i] > right[i]) return false
+                        }
+                        return false
+                    }
+                    def srcTokens = compareVersions(sourceVersaoBanco)
+                    def dstTokens = compareVersions(destinoVersaoBanco)
+                    if (isLowerThan(dstTokens, srcTokens)) {
+                        error("❌ DESTINO_VERSAO_BANCO (${destinoVersaoBanco}) não pode ser menor que a versão do banco origem descoberta (${sourceVersaoBanco}).")
+                    }
+                    echo "✅ Versões válidas: origem ${sourceVersaoBanco} → destino ${destinoVersaoBanco}"
+                }
+            }
+        }
+
+        stage('🎯 Seleção do Tomcat Destino') {
+            when {
+                expression { params.DEPLOY_APP }
+            }
+            steps {
+                script {
+                    def tipo = params.TIPO_AMBIENTE.toLowerCase()
+                    def remote = """set -euo pipefail
+cd /tmp/pipeline-${env.BUILD_NUMBER}
+chmod +x scripts/*.sh
+chmod 600 .secret_* .deploy_ssh_key
+./scripts/list_tomcats.sh --mode list \\
+    --tipo-ambiente "${tipo}" \\
+    --deploy-server-ip "${env.DESTINO_DEPLOY_SERVER_IP}" \\
+    --ssh-key-file ".deploy_ssh_key" \\
+    --sudo-password-file ".secret_sudo_password"
+"""
+                    def listOut = ''
+                    withCredentials([
+                        string(credentialsId: 'BASTION_HOST', variable: 'BASTION_HOST'),
+                        string(credentialsId: 'BASTION_USER', variable: 'BASTION_USER'),
+                        string(credentialsId: 'infra-sudo-pswd', variable: 'INFRA_SUDO_PASSWORD'),
+                        sshUserPrivateKey(credentialsId: 'SSH_PRIVATE_KEY', keyFileVariable: 'SSH_KEY', passphraseVariable: 'SSH_PASSPHRASE'),
+                        sshUserPrivateKey(credentialsId: 'ssh-credentials', keyFileVariable: 'DEPLOY_SSH_KEY', passphraseVariable: 'DEPLOY_SSH_PASSPHRASE')
+                    ]) {
+                        listOut = runOnBastion(
+                            remote: remote,
+                            secrets: ['.secret_sudo_password': 'INFRA_SUDO_PASSWORD'],
+                            files: ['.deploy_ssh_key': 'DEPLOY_SSH_KEY']
+                        )
+                    }
+
+                    def tomcats = parseResults(listOut)['TOMCAT'] ?: []
+                    if (tomcats.isEmpty()) {
+                        error("❌ Nenhum Tomcat encontrado em ${env.DESTINO_DEPLOY_SERVER_NAME} (${env.DESTINO_DEPLOY_SERVER_IP}).")
+                    }
+
+                    def escolha = ''
+                    timeout(time: 15, unit: 'MINUTES') {
+                        escolha = input(
+                            message: "Em qual Tomcat deseja fazer o deploy do ambiente cópia (${env.DESTINO_DEPLOY_SERVER_NAME})?",
+                            ok: 'Confirmar',
+                            parameters: [
+                                choice(name: 'TOMCAT', choices: tomcats.join('\n'), description: 'Tomcats disponíveis no servidor destino')
+                            ]
+                        )
+                    }
+                    if (!tomcats.contains(escolha)) {
+                        error("❌ Tomcat selecionado inválido: '${escolha}'.")
+                    }
+                    env.DESTINO_TOMCAT_VOLUME = escolha
+                    echo "✅ Tomcat destino selecionado: ${env.DESTINO_TOMCAT_VOLUME}"
                 }
             }
         }
@@ -480,49 +671,18 @@ pipeline {
                 script {
                     echo "🗄️ Iniciando cópia do banco de dados..."
 
-                    withCredentials([
+                    withCredentials(dbCredentialBindings() + [
                         string(credentialsId: 'BASTION_HOST', variable: 'BASTION_HOST'),
                         string(credentialsId: 'BASTION_USER', variable: 'BASTION_USER'),
-                        string(credentialsId: 'db-pathfind-user', variable: 'DB_USER_GCP'),
-                        string(credentialsId: 'db-pathfind-password', variable: 'DB_PASSWORD_GCP'),
-                        string(credentialsId: 'db-pathfind-user-oci', variable: 'DB_USER_OCI'),
-                        string(credentialsId: 'db-pathfind-password-oci-db-qa', variable: 'DB_PASSWORD_OCI_DB_QA'),
-                        string(credentialsId: 'db-pathfind-password-oci-db-imp', variable: 'DB_PASSWORD_OCI_DB_IMP'),
-                        string(credentialsId: 'db-pathfind-password-oci-db-02', variable: 'DB_PASSWORD_OCI_DB_02'),
                         sshUserPrivateKey(credentialsId: 'SSH_PRIVATE_KEY', keyFileVariable: 'SSH_KEY', passphraseVariable: 'SSH_PASSPHRASE')
                     ]) {
-                        // ========== RESOLVE SOURCE CREDENTIALS ==========
-                        def sourceLower = params.SOURCE_SERVIDOR.toLowerCase()
-                        def ociPasswordMap = [
-                            'oci-db-qa'  : env.DB_PASSWORD_OCI_DB_QA,
-                            'oci-db-imp' : env.DB_PASSWORD_OCI_DB_IMP,
-                            'oci-db-02'  : env.DB_PASSWORD_OCI_DB_02
-                        ]
-                        def sourceDbUser, sourceDbPassword
-                        if (sourceLower.startsWith('oci-')) {
-                            if (!ociPasswordMap.containsKey(sourceLower)) {
-                                error("❌ Servidor OCI '${params.SOURCE_SERVIDOR}' não possui credencial de senha mapeada no pipeline.")
-                            }
-                            sourceDbUser = env.DB_USER_OCI
-                            sourceDbPassword = ociPasswordMap[sourceLower]
-                        } else {
-                            sourceDbUser = env.DB_USER_GCP
-                            sourceDbPassword = env.DB_PASSWORD_GCP
-                        }
-
-                        // ========== RESOLVE DESTINATION CREDENTIALS ==========
-                        def destinoLower = params.DESTINO_SERVIDOR.toLowerCase()
-                        def destinoDbUser, destinoDbPassword
-                        if (destinoLower.startsWith('oci-')) {
-                            if (!ociPasswordMap.containsKey(destinoLower)) {
-                                error("❌ Servidor OCI '${params.DESTINO_SERVIDOR}' não possui credencial de senha mapeada no pipeline.")
-                            }
-                            destinoDbUser = env.DB_USER_OCI
-                            destinoDbPassword = ociPasswordMap[destinoLower]
-                        } else {
-                            destinoDbUser = env.DB_USER_GCP
-                            destinoDbPassword = env.DB_PASSWORD_GCP
-                        }
+                        // ========== RESOLVE CREDENTIALS ==========
+                        def sourceCreds = dbCredsFor(params.SOURCE_SERVIDOR, 'SOURCE_SERVIDOR')
+                        def destinoCreds = dbCredsFor(params.DESTINO_SERVIDOR, 'DESTINO_SERVIDOR')
+                        def sourceDbUser = sourceCreds.user
+                        def sourceDbPassword = sourceCreds.password
+                        def destinoDbUser = destinoCreds.user
+                        def destinoDbPassword = destinoCreds.password
 
                         def copyResult = sh(
                             script: """
@@ -697,7 +857,7 @@ SUDO_PASSWORD_REMOTE="\$(cat /tmp/pipeline-${BUILD_NUMBER}/.infra_sudo_password)
     --tipo-ambiente "${params.TIPO_AMBIENTE.toLowerCase()}" \\
     --deploy-server-name "${env.DESTINO_DEPLOY_SERVER_NAME}" \\
     --deploy-server-ip "${env.DESTINO_DEPLOY_SERVER_IP}" \\
-    --tomcat-volume "${params.DESTINO_TOMCAT_VOLUME}" \\
+    --tomcat-volume "${env.DESTINO_TOMCAT_VOLUME}" \\
     --app-name "${params.DESTINO_APP_NAME}" \\
     --ssh-key-file "/tmp/pipeline-${BUILD_NUMBER}/.deploy_ssh_key" \\
     --workspace "/tmp/pipeline-${BUILD_NUMBER}" \\
@@ -788,7 +948,7 @@ if [ "${params.DEPLOY_APP}" = "true" ]; then
     ./scripts/verify_deployment.sh \\
         --deploy-server-name "${env.DESTINO_DEPLOY_SERVER_NAME}" \\
         --deploy-server-ip "${env.DESTINO_DEPLOY_SERVER_IP}" \\
-        --tomcat-volume "${params.DESTINO_TOMCAT_VOLUME}" \\
+        --tomcat-volume "${env.DESTINO_TOMCAT_VOLUME}" \\
         --app-name "${params.DESTINO_APP_NAME}" \\
         --ssh-key-file "/tmp/pipeline-${BUILD_NUMBER}/.deploy_ssh_key" \\
         --sudo-password "\${SUDO_PASSWORD_REMOTE}"
@@ -884,4 +1044,93 @@ Parâmetros:
             """
         }
     }
+}
+
+// ==================== FUNÇÕES AUXILIARES ====================
+
+// Bindings das credenciais de banco (GCP e OCI) usadas para acessar origem/destino
+def dbCredentialBindings() {
+    return [
+        string(credentialsId: 'db-pathfind-user', variable: 'DB_USER_GCP'),
+        string(credentialsId: 'db-pathfind-password', variable: 'DB_PASSWORD_GCP'),
+        string(credentialsId: 'db-pathfind-user-oci', variable: 'DB_USER_OCI'),
+        string(credentialsId: 'db-pathfind-password-oci-db-qa', variable: 'DB_PASSWORD_OCI_DB_QA'),
+        string(credentialsId: 'db-pathfind-password-oci-db-imp', variable: 'DB_PASSWORD_OCI_DB_IMP'),
+        string(credentialsId: 'db-pathfind-password-oci-db-02', variable: 'DB_PASSWORD_OCI_DB_02')
+    ]
+}
+
+// Resolve usuário/senha do banco para um servidor. Deve ser chamada dentro de withCredentials(dbCredentialBindings()).
+def dbCredsFor(String servidor, String label) {
+    def lower = servidor.toLowerCase()
+    def ociPasswordMap = [
+        'oci-db-qa'  : env.DB_PASSWORD_OCI_DB_QA,
+        'oci-db-imp' : env.DB_PASSWORD_OCI_DB_IMP,
+        'oci-db-02'  : env.DB_PASSWORD_OCI_DB_02
+    ]
+    if (lower.startsWith('oci-')) {
+        if (!ociPasswordMap.containsKey(lower)) {
+            error("❌ Servidor OCI '${servidor}' (${label}) não possui credencial de senha mapeada no pipeline.")
+        }
+        return [user: env.DB_USER_OCI, password: ociPasswordMap[lower]]
+    }
+    return [user: env.DB_USER_GCP, password: env.DB_PASSWORD_GCP]
+}
+
+// Extrai as linhas "RESULT:CHAVE=valor" emitidas pelos scripts de descoberta.
+@NonCPS
+def parseResults(String out) {
+    def res = [:]
+    for (String line : out.readLines()) {
+        if (!line.startsWith('RESULT:')) { continue }
+        def kv = line.substring(7)
+        int idx = kv.indexOf('=')
+        if (idx <= 0) { continue }
+        def key = kv.substring(0, idx)
+        if (!res.containsKey(key)) { res[key] = [] }
+        res[key] << kv.substring(idx + 1).trim()
+    }
+    return res
+}
+
+// Executa um script no bastion e devolve o stdout (os logs dos scripts vão para stderr/console).
+// cfg.remote  : corpo do script remoto (bash)
+// cfg.secrets : [nomeArquivoRemoto: 'NOME_VAR_ENV'] — conteúdo da variável vira arquivo em /tmp/pipeline-N/ (removido ao final)
+// cfg.files   : [nomeArquivoRemoto: 'NOME_VAR_ENV'] — variável contém o caminho de um arquivo local a enviar
+// Exige BASTION_HOST, BASTION_USER, SSH_KEY e SSH_PASSPHRASE no ambiente (withCredentials).
+def runOnBastion(Map cfg) {
+    def uploads = ''
+    for (e in (cfg.secrets ?: [:]).entrySet()) {
+        uploads += 'printf \'%s\' "$' + e.value + '" > "$WORKSPACE/temp/' + e.key + '"\n'
+        uploads += 'scp -o StrictHostKeyChecking=no "$WORKSPACE/temp/' + e.key + '" "$BASTION_USER@$BASTION_HOST:/tmp/pipeline-$BUILD_NUMBER/' + e.key + '"\n'
+        uploads += 'rm -f "$WORKSPACE/temp/' + e.key + '"\n'
+    }
+    for (e in (cfg.files ?: [:]).entrySet()) {
+        uploads += 'scp -o StrictHostKeyChecking=no "$' + e.value + '" "$BASTION_USER@$BASTION_HOST:/tmp/pipeline-$BUILD_NUMBER/' + e.key + '"\n'
+    }
+
+    def template = '''
+cat > /tmp/ssh-add-script-$$.sh << 'EOF'
+#!/bin/bash
+echo "$SSH_PASSPHRASE"
+EOF
+chmod +x /tmp/ssh-add-script-$$.sh
+eval $(ssh-agent -s) > /dev/null
+cleanup() {
+    ssh -o StrictHostKeyChecking=no "$BASTION_USER@$BASTION_HOST" "rm -f /tmp/pipeline-$BUILD_NUMBER/.secret_* /tmp/pipeline-$BUILD_NUMBER/.deploy_ssh_key" > /dev/null 2>&1 || true
+    ssh-agent -k > /dev/null 2>&1 || true
+    rm -f /tmp/ssh-add-script-$$.sh
+}
+trap cleanup EXIT
+DISPLAY=:0 SSH_ASKPASS=/tmp/ssh-add-script-$$.sh ssh-add "$SSH_KEY" < /dev/null
+
+ssh -o StrictHostKeyChecking=no "$BASTION_USER@$BASTION_HOST" "mkdir -p /tmp/pipeline-$BUILD_NUMBER"
+scp -o StrictHostKeyChecking=no -r "$WORKSPACE/scripts/" "$BASTION_USER@$BASTION_HOST:/tmp/pipeline-$BUILD_NUMBER/"
+@@UPLOADS@@
+ssh -A -o StrictHostKeyChecking=no "$BASTION_USER@$BASTION_HOST" 'bash -s' << 'ENDREMOTE'
+@@REMOTE@@
+ENDREMOTE
+'''
+    def script = template.replace('@@UPLOADS@@', uploads).replace('@@REMOTE@@', cfg.remote)
+    return sh(script: script, returnStdout: true)
 }

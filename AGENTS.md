@@ -23,17 +23,23 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
 
 ## Stages do Jenkinsfile
 
-1. **Validação de Parâmetros** — resolve hosts origem/destino, valida versões
+1. **Validação de Parâmetros** — resolve hosts origem/destino, valida parâmetros estáticos
 2. **Preparação do Ambiente** — cria `temp/` e diretórios de trabalho
-3. **Sincronização de Migrations** — clona repo de infraestrutura (se necessário)
-4. **Cópia do Banco de Dados** — executa via bastion: `scripts/copy_database.sh`
+3. **Descoberta da Origem** — `scripts/discover_source.sh` + `scripts/list_tomcats.sh`:
+   - versão do banco origem (PTF: `configuracao.versao_banco`; PLN: `versaobanco` mais recente)
+   - nome/versão da aplicação origem (`curl` em `<SOURCE_APP_URL>/login.xhtml`; `Pathfind v.` no PTF, `Planner v.` no PLN)
+   - Tomcat onde a app origem roda (`listarVersoes{Planner|Roteirizador}.sh` via SSH + sudo; apenas informativo)
+4. **Validação de Versões** — `DESTINO_VERSAO_BANCO` ≥ versão descoberta da origem
+5. **Seleção do Tomcat Destino** — lista os Tomcats do servidor destino e pergunta ao usuário (`input`, timeout 15 min); só com `DEPLOY_APP=true`
+6. **Sincronização de Migrations** — clona repo de infraestrutura (se necessário)
+7. **Cópia do Banco de Dados** — executa via bastion: `scripts/copy_database.sh`
    - `pg_dump` do banco origem
    - `CREATE DATABASE` + restore no destino
    - Aplica updates da **versão origem → versão destino**
    - Executa config SQL (config-qa.sql, config-imp.sql, config-prod.sql, etc.)
    - Executa credentials.sql
-5. **Deploy da Aplicação** — reutiliza `build_app_artifact.sh` + `deploy_application.sh`
-6. **Verificação Final** — `verify_database.sh` + `verify_deployment.sh`
+8. **Deploy da Aplicação** — reutiliza `build_app_artifact.sh` + `deploy_application.sh`
+9. **Verificação Final** — `verify_database.sh` + `verify_deployment.sh`
 
 ## Parâmetros (divididos em origem e destino)
 
@@ -43,10 +49,11 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
 |---|---|
 | `SOURCE_SERVIDOR` | Servidor de banco de dados onde o banco origem reside |
 | `SOURCE_NOME_BANCO` | Nome do banco de dados existente |
-| `SOURCE_VERSAO_BANCO` | Versão atual do banco origem (ex: 15.13.1.0-27) |
 | `SOURCE_DEPLOY_TARGET` | Servidor deploy + Tomcat onde a app origem rola (formato NOME:IP) |
-| `SOURCE_TOMCAT_VOLUME` | Nome do volume Docker Tomcat da origem |
-| `SOURCE_VERSAO_APP` | Versão/ref da aplicação origem |
+| `SOURCE_APP_URL` | URL da aplicação origem, com ou sem `/login.xhtml` (obrigatória com `DEPLOY_APP=true`). O primeiro segmento do path é o nome da aplicação |
+| `SOURCE_APP_NAME` | Opcional. Sobrescreve o nome da aplicação derivado da URL |
+
+> Descobertos automaticamente (não são mais parâmetros): versão do banco origem, Tomcat origem e versão da aplicação origem.
 
 ### Destino (Destination)
 
@@ -56,7 +63,6 @@ Jenkins → Bastion (SSH_PRIVATE_KEY)
 | `DESTINO_NOME_BANCO` | Nome do novo banco |
 | `DESTINO_VERSAO_BANCO` | Versão desejada para o banco destino (≥ source) |
 | `DESTINO_DEPLOY_TARGET` | Servidor deploy + Tomcat destino (formato NOME:IP) |
-| `DESTINO_TOMCAT_VOLUME` | Nome do volume Docker Tomcat destino |
 | `DESTINO_APP_NAME` | Nome da aplicação no Tomcat destino |
 | `DESTINO_VERSAO_APP` | Versão/ref desejada da aplicação |
 | `TIPO_AMBIENTE` | PTF ou PLN |
@@ -87,10 +93,10 @@ Este pipeline **reutiliza** os seguintes arquivos de `pipelineCriarAmbiente`:
 ### Versão de updates
 
 O pipeline aplica **apenas** updates cuja versão está estritamente entre:
-- `SOURCE_VERSAO_BANCO` (exclusivo)
+- versão do banco origem descoberta pelo pipeline (exclusivo)
 - `DESTINO_VERSAO_BANCO` (inclusivo)
 
-Isso é idêntico ao filtro de updates do pipeline de criação, mas com `VERSAO_BASE_INICIAL` = `SOURCE_VERSAO_BANCO`.
+Isso é idêntico ao filtro de updates do pipeline de criação, mas com `VERSAO_BASE_INICIAL` = versão do banco origem descoberta.
 
 ### Multibanco
 
@@ -102,7 +108,7 @@ Não suportado na cópia (a base origem já possui sua estrutura de multibanco, 
 - [ ] O destino tem espaço suficiente para o dump (temporário em `/tmp/`)
 - [ ] A versão destino do banco é **≥** a versão origem
 - [ ] O servidor destino não possui um banco com o mesmo nome (`DESTINO_NOME_BANCO`)
-- [ ] Se `DEPLOY_APP=true`, o `DESTINO_DEPLOY_TARGET`, `DESTINO_TOMCAT_VOLUME` e `DESTINO_APP_NAME` estão corretos
+- [ ] Se `DEPLOY_APP=true`, o `DESTINO_DEPLOY_TARGET`, `DESTINO_APP_NAME` e `SOURCE_APP_URL` estão corretos (o Tomcat destino é escolhido durante a execução)
 
 ## Convenções de Código
 
