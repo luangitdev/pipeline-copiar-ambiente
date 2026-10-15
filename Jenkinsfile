@@ -36,7 +36,7 @@ pipeline {
                                 fallbackScript: [classpath: [], sandbox: true, script: 'return ["GCP01"]'],
                                 script: [classpath: [], sandbox: true, script: '''
                                     if (TIPO_AMBIENTE == "PLN") {
-                                        return ["GCP-PLN", "OCI-DB-QA"]
+                                        return ["GCP-PLN", "OCI-DB-QA", "OCI-DB-03"]
                                     } else {
                                         return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02"]
                                     }
@@ -1056,7 +1056,8 @@ def dbCredentialBindings() {
         string(credentialsId: 'db-pathfind-user-oci', variable: 'DB_USER_OCI'),
         string(credentialsId: 'db-pathfind-password-oci-db-qa', variable: 'DB_PASSWORD_OCI_DB_QA'),
         string(credentialsId: 'db-pathfind-password-oci-db-imp', variable: 'DB_PASSWORD_OCI_DB_IMP'),
-        string(credentialsId: 'db-pathfind-password-oci-db-02', variable: 'DB_PASSWORD_OCI_DB_02')
+        string(credentialsId: 'db-pathfind-password-oci-db-02', variable: 'DB_PASSWORD_OCI_DB_02'),
+        string(credentialsId: 'db-pathfind-password-oci-db-03', variable: 'DB_PASSWORD_OCI_DB_03')
     ]
 }
 
@@ -1066,7 +1067,8 @@ def dbCredsFor(String servidor, String label) {
     def ociPasswordMap = [
         'oci-db-qa'  : env.DB_PASSWORD_OCI_DB_QA,
         'oci-db-imp' : env.DB_PASSWORD_OCI_DB_IMP,
-        'oci-db-02'  : env.DB_PASSWORD_OCI_DB_02
+        'oci-db-02'  : env.DB_PASSWORD_OCI_DB_02,
+        'oci-db-03'  : env.DB_PASSWORD_OCI_DB_03
     ]
     if (lower.startsWith('oci-')) {
         if (!ociPasswordMap.containsKey(lower)) {
