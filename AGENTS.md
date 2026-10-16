@@ -110,6 +110,40 @@ Não suportado na cópia (a base origem já possui sua estrutura de multibanco, 
 - [ ] O servidor destino não possui um banco com o mesmo nome (`DESTINO_NOME_BANCO`)
 - [ ] Se `DEPLOY_APP=true`, o `DESTINO_DEPLOY_TARGET`, `DESTINO_APP_NAME` e `SOURCE_APP_URL` estão corretos (o Tomcat destino é escolhido durante a execução)
 
+## Cadastro de Novo Servidor
+
+Sempre que for solicitado cadastrar um novo servidor (aplicação ou banco, origem e/ou destino), **pergunte os dados necessários antes de alterar qualquer arquivo**. Não presuma valores (IPs, senhas, endpoints).
+
+### Servidor de aplicação (deploy) — PTF
+
+Perguntar:
+- **Nome** (ex.: `OCI-PTF-PROD-14`) e **IP** (alcançável pelo bastion), no formato `NOME:IP`.
+- **Endpoint do `ptf-idioma.language-url`** (IP interno:porta, ex.: `10.0.16.14:8099`). Opcional; sem ele o `deploy_application.sh` só emite warning.
+- **Usuário SSH** do deploy, se for diferente do padrão.
+
+Alterar:
+- `Jenkinsfile`: adicionar `"NOME:IP"` no bloco `else` (PTF) das **duas** listas, `SOURCE_DEPLOY_TARGET` e `DESTINO_DEPLOY_TARGET`. Para PLN, no bloco `if (TIPO_AMBIENTE == "PLN")`.
+- `scripts/deploy_application.sh`: entrada no `case "$DEPLOY_SERVER_NAME"` do `LANGUAGE_ENDPOINT` (se informado).
+
+### Servidor de banco
+
+Perguntar:
+- **Nome** (ex.: `OCI-DB-04`), **IP público/acessível pelo bastion** e **IP interno** (usado no `login.properties`).
+- **Tipo de ambiente** (PTF, PLN ou ambos) e se será origem, destino ou ambos.
+- **Credential do Jenkins** com a senha (`db-pathfind-password-<servidor>`) e o usuário do banco. **Nunca** colocar senha em texto no código; usar credential.
+- **SQL de configuração** do destino (`config-qa.sql`, `config-imp.sql`, `config-prod.sql` ou `config.sql`).
+
+Alterar:
+- `Jenkinsfile`: listas `SOURCE_SERVIDOR`/`DESTINO_SERVIDOR`, `dbInternalHostMap`, `dbCredentialBindings()` e `ociPasswordMap`.
+- `scripts/get_db_host.sh`: `case` de host (e a mensagem de "esperado").
+- `scripts/copy_database.sh`: `case` do `CONFIG_SQL`, se não for `config.sql`.
+- `config/environments.yaml`: bloco do servidor, se aplicável.
+
+### Pré-requisitos (fora do repo, confirmar com o usuário)
+
+- Bastion alcança o IP e a `SSH_PRIVATE_KEY` está autorizada no servidor.
+- Tomcat com os scripts `listarVersoes*.sh` (executados via SSH + sudo).
+
 ## Convenções de Código
 
 - Scripts bash usam `set -euo pipefail` e `source log_utils.sh` obrigatoriamente.

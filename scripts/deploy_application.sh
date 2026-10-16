@@ -150,6 +150,7 @@ case "$DEPLOY_SERVER_NAME" in
     PROD-11) LANGUAGE_ENDPOINT="10.0.16.49:8099" ;;
     COM-01) LANGUAGE_ENDPOINT="10.0.16.48:6030" ;;
     OCI-IMP-01) LANGUAGE_ENDPOINT="10.0.0.19:6030" ;;
+    OCI-IMP-02) LANGUAGE_ENDPOINT="10.0.0.156:8099" ;;
     PROD-05|PROD-07|PROD-08|PROD-09) LANGUAGE_ENDPOINT="" ;;
     *)
         log_warning "Servidor ${DEPLOY_SERVER_NAME} não mapeado para ptf-idioma.language-url; valor atual será mantido."
