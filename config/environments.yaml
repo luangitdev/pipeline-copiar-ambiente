@@ -75,6 +75,13 @@ servers:
     environments: ["ptf"]
     provider: "oci"
 
+  oci-db-04:
+    name: "OCI DB 04"
+    host: "144.33.17.249"
+    description: "Servidor de banco de dados OCI para ambiente PTF"
+    environments: ["ptf"]
+    provider: "oci"
+
   oci-ptf-qa:
     name: "OCI PTF QA Deploy"
     host: "134.65.30.12"

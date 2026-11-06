@@ -228,7 +228,7 @@ configure_db() {
             oci-db-imp)
                 CONFIG_SQL="$WORKSPACE/sql/$TIPO_AMBIENTE/config-imp.sql"
                 ;;
-            oci-db-02)
+            oci-db-02|oci-db-04)
                 CONFIG_SQL="$WORKSPACE/sql/$TIPO_AMBIENTE/config-prod.sql"
                 ;;
             *)

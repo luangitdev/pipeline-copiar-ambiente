@@ -38,7 +38,7 @@ pipeline {
                                     if (TIPO_AMBIENTE == "PLN") {
                                         return ["GCP-PLN", "OCI-DB-QA", "OCI-DB-03"]
                                     } else {
-                                        return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02"]
+                                        return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02", "OCI-DB-04"]
                                     }
                                 ''']
                             ]
@@ -130,7 +130,7 @@ pipeline {
                                     if (TIPO_AMBIENTE == "PLN") {
                                         return ["GCP-PLN", "OCI-DB-QA", "OCI-DB-03"]
                                     } else {
-                                        return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02"]
+                                        return ["GCP01", "GCP02", "GCP03", "OCI-DB-IMP", "OCI-DB-QA", "OCI-DB-02", "OCI-DB-04"]
                                     }
                                 ''']
                             ]
@@ -304,7 +304,8 @@ pipeline {
                         'oci-db-qa'  : '10.0.2.143',
                         'oci-db-imp' : '10.0.1.245',
                         'oci-db-02'  : '10.0.1.21',
-                        'oci-db-03'  : '10.0.1.246'
+                        'oci-db-03'  : '10.0.1.246',
+                        'oci-db-04'  : '10.0.1.235'
                     ]
                     env.SOURCE_DB_INTERNAL_HOST = dbInternalHostMap.get(params.SOURCE_SERVIDOR.toLowerCase(), env.SOURCE_DB_HOST)
                     env.DESTINO_DB_INTERNAL_HOST = dbInternalHostMap.get(params.DESTINO_SERVIDOR.toLowerCase(), env.DESTINO_DB_HOST)
@@ -315,6 +316,7 @@ pipeline {
                         'oci-db-imp' : [user: 'ociadm', password: 'Mobi!sfor#2027%'],
                         'oci-db-02'  : [user: 'ociadm', password: 'T8q#6m%74dZj'],
                         'oci-db-03'  : [user: 'ociadm', password: 'T8q#6m%74dZj'],
+                        'oci-db-04'  : [user: 'ociadm', password: 'T8q#6m%74dZj'],
                     ]
                     def deployDbCreds = deployDbCredsByServer.get(params.DESTINO_SERVIDOR.toLowerCase(), [user: 'pathfinddb', password: 'Find**(path)$DB'])
                     env.DEPLOY_DB_USER     = deployDbCreds.user
@@ -1080,7 +1082,8 @@ def dbCredsFor(String servidor, String label) {
         'oci-db-qa'  : env.DB_PASSWORD_OCI_DB_QA,
         'oci-db-imp' : env.DB_PASSWORD_OCI_DB_IMP,
         'oci-db-02'  : env.DB_PASSWORD_OCI_DB_02,
-        'oci-db-03'  : env.DB_PASSWORD_OCI_DB_03
+        'oci-db-03'  : env.DB_PASSWORD_OCI_DB_03,
+        'oci-db-04'  : env.DB_PASSWORD_OCI_DB_02  // mesma credencial do oci-db-02
     ]
     if (lower.startsWith('oci-')) {
         if (!ociPasswordMap.containsKey(lower)) {
