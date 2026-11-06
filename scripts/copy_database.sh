@@ -218,9 +218,18 @@ configure_db() {
     fi
 
     local CONFIG_SQL=""
-    if [[ "$TIPO_AMBIENTE" != "pln" ]]; then
-        local servidor_lower
-        servidor_lower=$(echo "$DESTINO_SERVIDOR" | tr '[:upper:]' '[:lower:]')
+    local servidor_lower
+    servidor_lower=$(echo "$DESTINO_SERVIDOR" | tr '[:upper:]' '[:lower:]')
+    if [[ "$TIPO_AMBIENTE" == "pln" ]]; then
+        case "$servidor_lower" in
+            oci-db-qa)
+                CONFIG_SQL="$WORKSPACE/sql/pln/config-qa-pln.sql"
+                ;;
+            oci-db-03)
+                CONFIG_SQL="$WORKSPACE/sql/pln/config-prod-pln.sql"
+                ;;
+        esac
+    else
         case "$servidor_lower" in
             oci-db-qa)
                 CONFIG_SQL="$WORKSPACE/sql/$TIPO_AMBIENTE/config-qa.sql"
@@ -235,6 +244,8 @@ configure_db() {
                 CONFIG_SQL="$WORKSPACE/sql/$TIPO_AMBIENTE/config.sql"
                 ;;
         esac
+    fi
+    if [[ -n "$CONFIG_SQL" ]]; then
         if [[ -f "$CONFIG_SQL" ]]; then
             log "⚙️ Executando scripts de configuração em '$target_db' ($(basename "$CONFIG_SQL"))..."
             if execute_sql_file_dest "$CONFIG_SQL" "$target_db"; then
