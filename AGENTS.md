@@ -121,6 +121,8 @@ Perguntar:
 - **Endpoint do `ptf-idioma.language-url`** (IP interno:porta, ex.: `10.0.16.14:8099`). Opcional; sem ele o `deploy_application.sh` só emite warning.
 - **Usuário SSH** do deploy, se for diferente do padrão.
 
+> **Obrigatório:** sempre que um servidor de aplicação PTF for adicionado (ou já estiver) na lista de **destino** (`DESTINO_DEPLOY_TARGET`), pergunte o endpoint do `ptf-idioma.language-url` se ele ainda não estiver mapeado no `case` de `scripts/deploy_application.sh`. Isso vale também ao adicionar um servidor existente a uma das listas, não só ao cadastrar um novo. Não presuma o valor.
+
 Alterar:
 - `Jenkinsfile`: adicionar `"NOME:IP"` no bloco `else` (PTF) das **duas** listas, `SOURCE_DEPLOY_TARGET` e `DESTINO_DEPLOY_TARGET`. Para PLN, no bloco `if (TIPO_AMBIENTE == "PLN")`.
 - `scripts/deploy_application.sh`: entrada no `case "$DEPLOY_SERVER_NAME"` do `LANGUAGE_ENDPOINT` (se informado).
